@@ -24,7 +24,7 @@ body{
 h1{text-align:center;margin-top:0}
 #square{text-align:center;font-size:2rem;margin:10px 0}
 #bpm{text-align:center;color:#9ca3af}
-img,video{
+img{
   width:100%;
   border-radius:12px;
   margin:10px 0;
@@ -53,39 +53,23 @@ input{background:#111827;color:#e5e7eb}
 <button id="rollBtn">Roll Dice</button>
 
 <div id="media"></div>
+
+<audio id="clickSound" preload="auto">
+  <source src="data:audio/wav;base64,UklGRhQAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQAAAAA=">
+</audio>
+
 </div>
 
 <script>
-/* ===== AUDIO ===== */
-let audioCtx;
-function initAudio(){
-  if(!audioCtx){
-    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
-  }
-  audioCtx.resume();
-}
-
-function metronome(bpm,duration){
-  const interval = 60000/bpm;
-  const end = Date.now()+duration;
-  const t = setInterval(()=>{
-    const o = audioCtx.createOscillator();
-    const g = audioCtx.createGain();
-    o.frequency.value = 1000;
-    g.gain.value = 0.2;
-    o.connect(g).connect(audioCtx.destination);
-    o.start();
-    o.stop(audioCtx.currentTime+0.05);
-    if(Date.now()>end) clearInterval(t);
-  },interval);
-}
-
-/* ===== GAME DATA ===== */
 let square = 1;
 const snakes = {16:6,48:30,79:19};
 const ladders = {3:22,11:26,20:38,41:60};
 
-/* ===== HELPERS ===== */
+const click = document.getElementById('clickSound');
+
+function rand(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
+function randTime(){return rand(10,30)*1000;}
+
 function bpmForSquare(n){
   if(n<=10) return rand(1,2);
   if(n<=30) return rand(2,3);
@@ -93,54 +77,57 @@ function bpmForSquare(n){
   if(n<=90) return rand(4,5);
   return rand(5,6);
 }
-function rand(a,b){return Math.floor(Math.random()*(b-a+1))+a;}
-function randTime(){return rand(10,30)*1000;}
 
-/* ===== REDDIT ===== */
-async function loadMedia(sub){
-  const res = await fetch(`https://www.reddit.com/r/${sub}.json?limit=50`);
-  const json = await res.json();
-  const posts = json.data.children
-    .map(p=>p.data)
-    .filter(p=>p.url && (p.url.includes('i.redd.it')||p.url.includes('preview.redd.it')||p.is_video));
-  if(!posts.length) return null;
-  return posts[rand(0,posts.length-1)];
-}
-
-function showPost(post){
-  media.innerHTML='';
-  if(post.is_video && post.media?.reddit_video){
-    const v=document.createElement('video');
-    v.src=post.media.reddit_video.fallback_url;
-    v.autoplay=true;v.loop=true;v.muted=true;
-    media.appendChild(v);
-  }else{
-    const i=document.createElement('img');
-    i.src=post.url;
-    media.appendChild(i);
+async function loadImage(sub){
+  try{
+    const r = await fetch(`https://www.reddit.com/r/${sub}.json?raw_json=1`);
+    const j = await r.json();
+    const posts = j.data.children
+      .map(p=>p.data)
+      .filter(p=>p.url && p.url.match(/i\.redd\.it|preview\.redd\.it/));
+    if(!posts.length) return null;
+    return posts[rand(0,posts.length-1)].url;
+  }catch{
+    return null;
   }
 }
 
-/* ===== MAIN ===== */
-rollBtn.onclick=async()=>{
-  initAudio();
+function startMetronome(bpm,duration){
+  const interval = 60000/bpm;
+  const end = Date.now()+duration;
+  const t = setInterval(()=>{
+    click.currentTime=0;
+    click.play();
+    if(Date.now()>end) clearInterval(t);
+  },interval);
+}
 
+rollBtn.onclick = async()=>{
   const roll = rand(1,6);
   square += roll;
   if(snakes[square]) square = snakes[square];
   if(ladders[square]) square = ladders[square];
   if(square>100) square=100;
 
-  document.getElementById('square').textContent=`Square ${square}`;
+  squareDiv.textContent = `Square ${square}`;
 
   const bpm = bpmForSquare(square);
-  document.getElementById('bpm').textContent=`BPM: ${bpm}`;
+  bpmDiv.textContent = `BPM: ${bpm}`;
 
-  const post = await loadMedia(subreddit.value||'gifs');
-  if(post) showPost(post);
+  media.innerHTML='';
 
-  metronome(bpm,randTime());
+  const img = await loadImage(subreddit.value || 'gifs');
+  if(img){
+    const i=document.createElement('img');
+    i.src=img;
+    media.appendChild(i);
+  }
+
+  startMetronome(bpm,randTime());
 };
+
+const squareDiv = document.getElementById('square');
+const bpmDiv = document.getElementById('bpm');
 </script>
 </body>
 </html>
