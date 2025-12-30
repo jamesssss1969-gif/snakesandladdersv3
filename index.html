@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Metronome Ladder Game</title>
+
+<style>
+body{
+  font-family: system-ui, sans-serif;
+  background:#0f172a;
+  color:#e5e7eb;
+  display:flex;
+  justify-content:center;
+  padding:20px;
+}
+.panel{
+  background:#020617;
+  padding:20px;
+  border-radius:16px;
+  width:380px;
+  max-width:95vw;
+  box-shadow:0 20px 40px rgba(0,0,0,.6);
+}
+h1{text-align:center;margin-top:0;}
+.stat{
+  display:flex;
+  justify-content:space-between;
+  margin:6px 0;
+  font-weight:600;
+}
+input{
+  width:100%;
+  padding:10px;
+  border-radius:10px;
+  border:none;
+  margin-bottom:10px;
+}
+button{
+  width:100%;
+  padding:14px;
+  border-radius:999px;
+  border:none;
+  background:#1d4ed8;
+  color:white;
+  font-size:1rem;
+  font-weight:700;
+  cursor:pointer;
+}
+button:disabled{opacity:.5;}
+#imageBox{
+  margin-top:14px;
+  border-radius:12px;
+  overflow:hidden;
+  display:none;
+}
+#imageBox img{
+  width:100%;
+}
+#status{
+  text-align:center;
+  margin-top:10px;
+  min-height:24px;
+  font-weight:600;
+}
+</style>
+</head>
+
+<body>
+<div class="panel">
+  <h1>Snakes & Tempo</h1>
+
+  <input id="subredditInput" placeholder="Enter subreddit (e.g. gifs)" />
+
+  <div class="stat"><span>Square</span><span id="square">1</span></div>
+  <div class="stat"><span>Last Roll</span><span id="roll">–</span></div>
+  <div class="stat"><span>Metronome</span><span id="bpm">–</span></div>
+
+  <button id="rollBtn">Roll Dice</button>
+
+  <div id="imageBox"><img id="img"></div>
+  <div id="status"></div>
+</div>
+
+<script>
+/* ========= AUDIO ========= */
+let audioCtx;
+function initAudio(){
+  if(!audioCtx){
+    audioCtx = new (window.AudioContext||window.webkitAudioContext)();
+  }
+}
+function clickSound(){
+  initAudio();
+  const o = audioCtx.createOscillator();
+  const g = audioCtx.createGain();
+  o.type = "square";
+  o.frequency.value = 800;
+  g.gain.value = 0.15;
+  o.connect(g).connect(audioCtx.destination);
+  o.start();
+  o.stop(audioCtx.currentTime + 0.05);
+}
+
+/* ========= GAME STATE ========= */
+let position = 1;
+let locked = false;
+let metroTimer, stopTimer;
+
+/* ========= SNAKES & LADDERS ========= */
+const jumps = {
+  4:14, 9:31, 17:7, 20:38, 28:84,
+  40:59, 51:67, 54:34, 62:19,
+  64:81, 71:91, 87:24, 93:73, 95:75, 99:78
+};
+
+/* ========= BPM RANGES ========= */
+function bpmForSquare(n){
+  if(n<=10) return rand(1,2);
+  if(n<=20) return rand(2,3);
+  if(n<=30) return rand(2,4);
+  if(n<=40) return rand(3,4);
+  if(n<=50) return rand(3,5);
+  if(n<=60) return rand(4,5);
+  if(n<=70) return rand(4,6);
+  if(n<=80) return rand(5,6);
+  if(n<=90) return rand(5,6);
+  return 6;
+}
+
+function rand(min,max){
+  return Math.floor(Math.random()*(max-min+1))+min;
+}
+
+/* ========= REDDIT IMAGE ========= */
+async function fetchImage(sub){
+  try{
+    const url = `https://corsproxy.io/?https://www.reddit.com/r/${sub}/hot.json?limit=50`;
+    const r = await fetch(url);
+    const j = await r.json();
+    const posts = j.data.children
+      .map(p=>p.data)
+      .filter(p=>p.url && (p.url.endsWith(".jpg")||p.url.endsWith(".png")||p.url.endsWith(".gif")));
+    if(posts.length===0) return null;
+    return posts[Math.floor(Math.random()*posts.length)].url;
+  }catch{
+    return null;
+  }
+}
+
+/* ========= TURN LOGIC ========= */
+rollBtn.onclick = async ()=>{
+  initAudio();
+  if(locked) return;
+
+  locked = true;
+  rollBtn.disabled = true;
+
+  const die = rand(1,6);
+  roll.textContent = die;
+
+  position += die;
+  if(position>100) position = 100;
+
+  if(jumps[position]){
+    position = jumps[position];
+  }
+
+  square.textContent = position;
+
+  const bpmVal = bpmForSquare(position);
+  bpm.textContent = bpmVal + " bpm";
+
+  const duration = rand(10,30);
+  status.textContent = `Playing for ${duration}s`;
+
+  const sub = subredditInput.value.trim() || "gifs";
+  const imgUrl = await fetchImage(sub);
+
+  if(imgUrl){
+    img.src = imgUrl;
+    imageBox.style.display = "block";
+  }
+
+  const interval = 60000 / bpmVal;
+  metroTimer = setInterval(clickSound, interval);
+
+  stopTimer = setTimeout(()=>{
+    clearInterval(metroTimer);
+    imageBox.style.display = "none";
+    status.textContent = "Roll again";
+    rollBtn.disabled = false;
+    locked = false;
+  }, duration*1000);
+};
+</script>
+</body>
+</html>
